@@ -3,6 +3,8 @@ package dev.steenbakker.mobile_scanner
 import android.app.Activity
 import android.graphics.Rect
 import android.net.Uri
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
@@ -16,7 +18,9 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import dev.steenbakker.mobile_scanner.objects.DetectionSpeed
 import dev.steenbakker.mobile_scanner.objects.MobileScannerStartParameters
+import dev.steenbakker.mobile_scanner.utils.YuvToRgbConverter
 import io.flutter.view.TextureRegistry
+import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
 class MobileScanner(
@@ -83,12 +87,44 @@ class MobileScanner(
                 }
 
                 if (barcodeMap.isNotEmpty()) {
-                    mobileScannerCallback(
-                        barcodeMap,
-                        if (returnImage) mediaImage.toByteArray() else null,
-                        if (returnImage) mediaImage.width else null,
-                        if (returnImage) mediaImage.height else null
-                    )
+//                    mobileScannerCallback(
+//                        barcodeMap,
+//                        if (returnImage) mediaImage.toByteArray() else null,
+//                        if (returnImage) mediaImage.width else null,
+//                        if (returnImage) mediaImage.height else null
+//                    )
+                    if (returnImage) {
+
+                        val bitmap = Bitmap.createBitmap(mediaImage.width, mediaImage.height, Bitmap.Config.ARGB_8888)
+
+                        val imageFormat = YuvToRgbConverter(activity.applicationContext)
+
+                        imageFormat.yuvToRgb(mediaImage, bitmap)
+
+                        val bmResult = rotateBitmap(bitmap, camera?.cameraInfo?.sensorRotationDegrees?.toFloat() ?: 90f)
+
+                        val stream = ByteArrayOutputStream()
+                        bmResult.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                        val byteArray = stream.toByteArray()
+                        bmResult.recycle()
+
+
+                        mobileScannerCallback(
+                            barcodeMap,
+                            byteArray,
+                            bmResult.width,
+                            bmResult.height
+                        )
+
+                    } else {
+
+                        mobileScannerCallback(
+                            barcodeMap,
+                            null,
+                            null,
+                            null
+                        )
+                    }
                 }
             }
             .addOnFailureListener { e ->
@@ -104,6 +140,12 @@ class MobileScanner(
                 scannerTimeout = false
             }, detectionTimeout)
         }
+    }
+
+    fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
+        val matrix = Matrix()
+        matrix.postRotate(degrees)
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
     // scales the scanWindow to the provided inputImage and checks if that scaled
